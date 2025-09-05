@@ -1,81 +1,97 @@
-﻿using System;
+﻿using Microsoft.Data.SqlClient;
 using System.Collections.Generic;
-using System.Data.SqlClient;
 using System.Windows;
 
 namespace WpfApp1
 {
-    public class Student
-    {
-        public int StudentId { get; set; }
-        public string FirstName { get; set; }
-        public string LastName { get; set; }
-    }
-
     public partial class MainWindow : Window
     {
-        static string connectionString =
-            "Data Source=LAB1502-001\\SQLEXPRESS;" +
-            "Initial Catalog=Tecsup2023DB;" +
-            "User Id=fabricioam; Pwd=fabricioam; " +
-            "TrustServerCertificate=true;";
+        private readonly string connectionString =
+             "Data Source=LAB1502-001\\SQLEXPRESS;" +
+             "Initial Catalog=Tecsup2023DB;" +
+             "User Id=fabricioam;Pwd=fabricioam;" +
+             "TrustServerCertificate=true;";
 
         public MainWindow()
         {
             InitializeComponent();
-            CargarEstudiantes(); // Muestra todos al iniciar
+            LoadAllStudents();
         }
 
-        // 7. Cargar estudiantes usando DataReader
-        private List<Student> ObtenerEstudiantes(string filtroNombre = "")
+        private void LoadAllStudents()
         {
-            var estudiantes = new List<Student>();
+            var students = new List<Student>();
+
             using (var conn = new SqlConnection(connectionString))
+            using (var cmd = new SqlCommand("SELECT StudentId, FirstName, LastName FROM dbo.Students ORDER BY StudentId", conn))
             {
                 conn.Open();
-                string query = "SELECT StudentId, FirstName, LastName FROM dbo.Students";
-                if (!string.IsNullOrWhiteSpace(filtroNombre))
+                using (var rdr = cmd.ExecuteReader())
                 {
-                    query += " WHERE FirstName LIKE @nombre OR LastName LIKE @nombre";
-                }
-                using (var cmd = new SqlCommand(query, conn))
-                {
-                    if (!string.IsNullOrWhiteSpace(filtroNombre))
-                        cmd.Parameters.AddWithValue("@nombre", "%" + filtroNombre + "%");
-                    using (var reader = cmd.ExecuteReader())
+                    while (rdr.Read())
                     {
-                        while (reader.Read())
+                        students.Add(new Student
                         {
-                            estudiantes.Add(new Student
-                            {
-                                StudentId = reader.GetInt32(reader.GetOrdinal("StudentId")),
-                                FirstName = reader.GetString(reader.GetOrdinal("FirstName")),
-                                LastName = reader.GetString(reader.GetOrdinal("LastName"))
-                            });
-                        }
+                            StudentId = rdr.GetInt32(rdr.GetOrdinal("StudentId")),
+                            FirstName = rdr.GetString(rdr.GetOrdinal("FirstName")),
+                            LastName = rdr.GetString(rdr.GetOrdinal("LastName"))
+                        });
                     }
                 }
             }
-            return estudiantes;
+
+            dgEstudiantes.ItemsSource = students;
         }
 
-        private void CargarEstudiantes(string filtroNombre = "")
+        private List<Student> SearchStudents(string term)
         {
-            dgEstudiantes.ItemsSource = ObtenerEstudiantes(filtroNombre);
+            var list = new List<Student>();
+
+            using (var conn = new SqlConnection(connectionString))
+            using (var cmd = new SqlCommand(
+                @"SELECT StudentId, FirstName, LastName
+                  FROM dbo.Students
+                  WHERE FirstName LIKE @q OR LastName LIKE @q
+                  ORDER BY StudentId", conn))
+            {
+                cmd.Parameters.AddWithValue("@q", $"%{term}%");
+                conn.Open();
+                using (var rdr = cmd.ExecuteReader())
+                {
+                    while (rdr.Read())
+                    {
+                        list.Add(new Student
+                        {
+                            StudentId = rdr.GetInt32(rdr.GetOrdinal("StudentId")),
+                            FirstName = rdr.GetString(rdr.GetOrdinal("FirstName")),
+                            LastName = rdr.GetString(rdr.GetOrdinal("LastName"))
+                        });
+                    }
+                }
+            }
+
+            return list;
         }
 
-        // 8. Buscar por nombre
+        // Evento Buscar
         private void BtnBuscar_Click(object sender, RoutedEventArgs e)
         {
-            string nombre = txtNombre.Text.Trim();
-            CargarEstudiantes(nombre);
+            string term = txtNombre.Text.Trim();
+            if (string.IsNullOrEmpty(term))
+            {
+                LoadAllStudents();
+            }
+            else
+            {
+                dgEstudiantes.ItemsSource = SearchStudents(term);
+            }
         }
+    }
 
-        // Mostrar todos
-        private void BtnMostrarTodo_Click(object sender, RoutedEventArgs e)
-        {
-            txtNombre.Text = "";
-            CargarEstudiantes();
-        }
+    public class Student
+    {
+        public int StudentId { get; set; }
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
     }
 }
